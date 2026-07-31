@@ -50,3 +50,10 @@ jobs:
             git push
             echo "✅ 数据已提交并推送"
           fi
+
+      - name: 清除 jsDelivr CDN 缓存（确保手机端立即看到新数据）
+        run: |
+          for f in latest.json history.json; do
+            curl -s "https://purge.jsdelivr.net/gh/yumingze922/insight-daily@main/public/data/$f" > /dev/null || true
+          done
+          echo "✅ jsDelivr 缓存已清除"

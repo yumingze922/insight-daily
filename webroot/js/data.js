@@ -400,11 +400,13 @@ const MockData = {
 const DataAPI = {
   // 远程数据源候选（按顺序尝试，哪个可用用哪个）
   remoteSources: [
-    // 1. CloudStudio 部署地址（当前可用，国内可访问）
+    // 1. jsDelivr CDN（GitHub Actions 每天更新数据后自动同步，推荐）
+    'https://cdn.jsdelivr.net/gh/yumingze922/insight-daily@main/public/data/latest.json',
+    // 2. CloudStudio 部署地址
     'https://1bb5b1f19fe64920b4aff8618fd1c1a0.sh3.agentos-app.net/public/data/latest.json',
-    // 2. EdgeOne Pages 部署地址（国内快，配置好后启用）
+    // 3. EdgeOne Pages 部署地址
     'https://insight-daily-biegirh3.edgeone.app/public/data/latest.json',
-    // 3. 同域相对路径（本地或自定义部署）
+    // 4. 同域相对路径（本地或自定义部署）
     '/public/data/latest.json',
     '/data/latest.json'
   ],
@@ -435,6 +437,7 @@ const DataAPI = {
   // 拉取指定日期的事件数据（用于往期点击）
   async fetchRemoteByDate(date) {
     const sources = [
+      `https://cdn.jsdelivr.net/gh/yumingze922/insight-daily@main/public/data/${date}.json`,
       `https://1bb5b1f19fe64920b4aff8618fd1c1a0.sh3.agentos-app.net/public/data/${date}.json`,
       `/public/data/${date}.json`,
       `/data/${date}.json`
@@ -485,6 +488,7 @@ const DataAPI = {
   async fetchHistory() {
     // 优先远程历史索引
     const historySources = [
+      'https://cdn.jsdelivr.net/gh/yumingze922/insight-daily@main/public/data/history.json',
       'https://1bb5b1f19fe64920b4aff8618fd1c1a0.sh3.agentos-app.net/public/data/history.json',
       'https://insight-daily-biegirh3.edgeone.app/public/data/history.json',
       '/public/data/history.json',
