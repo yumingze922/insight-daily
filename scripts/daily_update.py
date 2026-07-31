@@ -433,8 +433,21 @@ async def main():
     print(f"  执行时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
-    # 你的 PWA 部署地址（部署到 Vercel 后替换为实际域名）
-    base_url = os.environ.get("BASE_URL", "https://d0fadc7bf1e844e8b8ca9cd83f8b4db1.gz2.agentos-app.net")
+    # PWA 部署地址（手机可访问的公网地址）
+    base_url = os.environ.get("BASE_URL", "https://1bb5b1f19fe64920b4aff8618fd1c1a0.sh3.agentos-app.net")
+    
+    # 支持通过命令行 --date YYYY-MM-DD 或环境变量 DATE_OVERRIDE 指定日期
+    target_date = os.environ.get("DATE_OVERRIDE", None)
+    if not target_date and "--date" in sys.argv:
+        idx = sys.argv.index("--date")
+        if idx + 1 < len(sys.argv):
+            target_date = sys.argv[idx + 1]
+    if target_date:
+        today = target_date
+    else:
+        today = datetime.now().strftime("%Y-%m-%d")
+
+    display_date = datetime.strptime(today, "%Y-%m-%d" if "-" in today else "%Y%m%d").strftime("%Y年%m月%d日")
 
     # 1. 获取新闻
     print("\n📰 正在获取今日新闻...")
@@ -487,7 +500,7 @@ async def main():
             "title": raw_title,
             "summary": raw_summary,
             "source": "36氪 · 八点一氪",
-            "date": datetime.now().strftime("%Y年%m月%d日"),
+            "date": display_date,
             "impact": raw_impact,
             "tags": raw_tags,
             **analysis
@@ -495,12 +508,12 @@ async def main():
         all_results.append(full_event)
 
     # 4. 存储结果
-    today = datetime.now().strftime("%Y-%m-%d")
-    output_file = OUTPUT_DIR / f"{today}.json"
+    today_date = today
+    output_file = OUTPUT_DIR / f"{today_date}.json"
 
     output_data = {
         "generated_at": datetime.now().isoformat(),
-        "date": today,
+        "date": today_date,
         "events": all_results
     }
 
@@ -511,6 +524,23 @@ async def main():
     latest_file = OUTPUT_DIR / "latest.json"
     latest_file.write_text(json.dumps(output_data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"   已同步写入：{latest_file}")
+
+    # 追加往期索引 history.json
+    history_file = OUTPUT_DIR / "history.json"
+    history = []
+    if history_file.exists():
+        try:
+            history = json.loads(history_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            history = []
+    history = [h for h in history if h.get("date") != today_date]
+    history.insert(0, {
+        "date": today_date,
+        "events": [{"id": e["id"], "title": e["title"], "summary": e["summary"][:80]} for e in all_results]
+    })
+    history = history[:30]
+    history_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"   往期索引已更新（共 {len(history)} 天）")
 
     # 5. 推送通知
     if all_results:
