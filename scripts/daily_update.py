@@ -22,11 +22,28 @@ import json
 import os
 import sys
 import re
+import time
+import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import httpx
+
+
+# ============================================================
+# 签名工具
+# ============================================================
+
+def generate_feishu_sign(timestamp: str, secret: str) -> str:
+    """飞书自定义机器人签名：HMAC-SHA256(key=ts+\n+secret, msg='') → base64"""
+    import hashlib
+    import hmac as hmac_lib
+    key = (timestamp + '\n' + secret).encode('utf-8')
+    msg = ''.encode('utf-8')
+    h = hmac_lib.new(key, msg, hashlib.sha256)
+    return base64.b64encode(h.digest()).decode('utf-8')
+
 
 # ============================================================
 # 配置
@@ -42,6 +59,7 @@ PUSH_CHANNELS = {
     "wecom": os.environ.get("WECOM_WEBHOOK", ""),
     "dingtalk": os.environ.get("DINGTALK_WEBHOOK", ""),
 }
+FEISHU_SECRET = os.environ.get("FEISHU_SECRET", "")
 
 # 输出路径
 OUTPUT_DIR = Path(__file__).parent.parent / "public" / "data"
@@ -318,13 +336,17 @@ async def push_notification(event_title: str, event_summary: str, event_id: str,
 
 
 async def push_feishu(title: str, summary: str, url: str):
-    """飞书自定义机器人 —— 富文本卡片消息"""
+    """飞书自定义机器人 —— 富文本卡片消息（带签名校验）"""
+    ts = str(int(time.time()))
+
     payload = {
+        "timestamp": ts,
+        "sign": generate_feishu_sign(ts, FEISHU_SECRET) if FEISHU_SECRET else "",
         "msg_type": "interactive",
         "card": {
             "header": {
                 "title": {"tag": "plain_text", "content": "每日深度思辨"},
-                "template": "wathet"  # 天蓝色头部
+                "template": "wathet"
             },
             "elements": [
                 {
@@ -343,12 +365,6 @@ async def push_feishu(title: str, summary: str, url: str):
                             "text": {"tag": "plain_text", "content": "开始今日思辨"},
                             "type": "primary",
                             "url": url
-                        },
-                        {
-                            "tag": "button",
-                            "text": {"tag": "plain_text", "content": "往期回顾"},
-                            "type": "default",
-                            "url": url.replace(f"?event={url.split('=')[-1]}", "")
                         }
                     ]
                 }
@@ -358,7 +374,7 @@ async def push_feishu(title: str, summary: str, url: str):
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(PUSH_CHANNELS["feishu"], json=payload)
-        if resp.status_code == 200:
+        if resp.status_code == 200 and resp.json().get("code") == 0:
             print("✅ 飞书推送成功")
         else:
             print(f"❌ 飞书推送失败: {resp.status_code} {resp.text}")
@@ -418,7 +434,7 @@ async def main():
     print("=" * 60)
 
     # 你的 PWA 部署地址（部署到 Vercel 后替换为实际域名）
-    base_url = os.environ.get("BASE_URL", "https://your-domain.vercel.app")
+    base_url = os.environ.get("BASE_URL", "https://d0fadc7bf1e844e8b8ca9cd83f8b4db1.gz2.agentos-app.net")
 
     # 1. 获取新闻
     print("\n📰 正在获取今日新闻...")
