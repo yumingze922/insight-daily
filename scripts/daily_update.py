@@ -449,6 +449,19 @@ async def main():
 
     display_date = datetime.strptime(today, "%Y-%m-%d" if "-" in today else "%Y%m%d").strftime("%Y年%m月%d日")
 
+    # 防重复保险：如果当天数据已生成过，直接跳过（避免云上+本地双重触发导致重复推送）
+    existing_file = OUTPUT_DIR / f"{today}.json"
+    if existing_file.exists():
+        try:
+            existing = json.loads(existing_file.read_text(encoding="utf-8"))
+            gen_date = existing.get("generated_at", "")[:10]
+            if gen_date == today:
+                print(f"⚠️  当天数据已存在（{gen_date}），跳过本次生成，避免重复推送。")
+                print(f"   如需强制重新生成，请删除 {existing_file} 后再运行。")
+                return
+        except json.JSONDecodeError:
+            pass
+
     # 1. 获取新闻
     print("\n📰 正在获取今日新闻...")
     news_text = await fetch_36kr_news()
