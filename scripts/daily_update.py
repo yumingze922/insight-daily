@@ -28,6 +28,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# Windows 控制台默认 GBK 编码，无法输出 emoji，强制使用 UTF-8
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
 import httpx
 
 
