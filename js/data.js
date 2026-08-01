@@ -403,7 +403,7 @@ const DataAPI = {
     // 1. jsDelivr CDN（GitHub Actions 每天更新数据后自动同步，推荐）
     'https://cdn.jsdelivr.net/gh/yumingze922/insight-daily@main/public/data/latest.json',
     // 2. CloudStudio 部署地址
-    'https://1bb5b1f19fe64920b4aff8618fd1c1a0.sh3.agentos-app.net/public/data/latest.json',
+    'https://cdn.jsdelivr.net/gh/yumingze922/insight-daily@main/public/data/latest.json',
     // 3. EdgeOne Pages 部署地址
     'https://insight-daily-biegirh3.edgeone.app/public/data/latest.json',
     // 4. 同域相对路径（本地或自定义部署）
