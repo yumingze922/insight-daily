@@ -487,7 +487,65 @@ async def main():
         events = [events]
     print(f"   选出 {len(events)} 条事件")
 
-    # 3. 逐条生成分析
+    # 去重：如果与昨天的新闻明显重复，换一批
+    try:
+        today_dt = datetime.strptime(today, "%Y-%m-%d") if "-" in today else datetime.strptime(today, "%Y%m%d")
+        from datetime import timedelta
+        yday = (today_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+        yday_file = OUTPUT_DIR / f"{yday}.json"
+        if yday_file.exists():
+            ydata = json.loads(yday_file.read_text(encoding="utf-8"))
+            yesterdays_titles = [e.get("title", "") for e in ydata.get("events", [])]
+            todays_titles = [e.get("title", "") for e in events]
+
+            def extract_tokens(title: str) -> set:
+                # 用双字组（bigram）精确匹配中文新闻标题
+                clean = title.replace("：","").replace("，","").replace("、","").replace(" ","").replace("？","").replace("！","")
+                return {clean[i:i+2] for i in range(len(clean)-1)}
+
+            yday_tokens = set()
+            for t in yesterdays_titles:
+                yday_tokens |= extract_tokens(t)
+
+            overlaps = 0
+            for t in todays_titles:
+                tokens = extract_tokens(t)
+                common = len(tokens & yday_tokens)
+                if common >= 2:  # 至少2个关键词重叠就算重复
+                    overlaps += 1
+
+            print(f"   与昨天关键词重叠: {overlaps}/3 条")
+            if overlaps >= 2:
+                print(f"   ⚠️ 重叠度过高，通知 LLM 换一批...")
+                avoid_hint = "、".join([t[:30] for t in yesterdays_titles])
+                retry_prompt = EVENT_SELECTION_PROMPT.format(news_summaries=news_text[:3000])
+                retry_prompt += f"\n\n【特别注意】请务必避免以下昨天已分析的话题：\n{avoid_hint}\n请从其他新闻中选 3 条完全不同的事件。"
+                retry_result = await call_llm(retry_prompt, "请按要求选出3条全新事件，必须避开已提示的话题。")
+                retry_events = extract_json(retry_result)
+                if isinstance(retry_events, dict):
+                    retry_events = [retry_events]
+                if retry_events and len(retry_events) >= 2:
+                    events = retry_events
+                    print(f"   ✅ 已更换为全新事件")
+    except Exception as e:
+        print(f"   ⚠️ 去重跳过（{e}）")
+
+    # 3. 生成今日名言
+    print("\n💬 正在生成今日名言...")
+    quote_prompt = f"""基于今天的三条热点事件（{', '.join([e.get('title','')[:20] for e in events])}），
+生成一句启发性的每日名言，要求：
+- 10-20 个汉字
+- 与今天事件主题相关
+- 以 JSON 输出：{{"text": "名言内容", "source": "出处（如：老子/彼得·德鲁克）"}}
+仅输出 JSON。"""
+
+    quote_result = await call_llm(quote_prompt, "请输出每日名言JSON。")
+    daily_quote = extract_json(quote_result)
+    if not daily_quote or "text" not in daily_quote:
+        daily_quote = {"text": "天下难事，必作于易", "source": "老子 · 道德经"}
+    print(f"   今日名言：「{daily_quote['text']}」——{daily_quote['source']}")
+
+    # 4. 逐条生成分析
     all_results = []
     for i, event in enumerate(events):
         print(f"\n📝 正在生成第{i+1}条事件分析：{event.get('title', 'N/A')[:40]}...")
@@ -536,6 +594,7 @@ async def main():
     output_data = {
         "generated_at": datetime.now().isoformat(),
         "date": today_date,
+        "daily_quote": daily_quote,
         "events": all_results
     }
 
