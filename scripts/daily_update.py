@@ -530,21 +530,6 @@ async def main():
     except Exception as e:
         print(f"   ⚠️ 去重跳过（{e}）")
 
-    # 3. 生成今日名言
-    print("\n💬 正在生成今日名言...")
-    quote_prompt = f"""基于今天的三条热点事件（{', '.join([e.get('title','')[:20] for e in events])}），
-生成一句启发性的每日名言，要求：
-- 10-20 个汉字
-- 与今天事件主题相关
-- 以 JSON 输出：{{"text": "名言内容", "source": "出处（如：老子/彼得·德鲁克）"}}
-仅输出 JSON。"""
-
-    quote_result = await call_llm(quote_prompt, "请输出每日名言JSON。")
-    daily_quote = extract_json(quote_result)
-    if not daily_quote or "text" not in daily_quote:
-        daily_quote = {"text": "天下难事，必作于易", "source": "老子 · 道德经"}
-    print(f"   今日名言：「{daily_quote['text']}」——{daily_quote['source']}")
-
     # 4. 逐条生成分析
     all_results = []
     for i, event in enumerate(events):

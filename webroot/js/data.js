@@ -418,7 +418,7 @@ const DataAPI = {
   remoteData: null,
 
   getDailyQuote() {
-    return MockData.dailyQuote;
+    if (this.remoteData && this.remoteData.daily_quote) { return this.remoteData.daily_quote; } return MockData.dailyQuote;
   },
 
   getDailyEvents() {
