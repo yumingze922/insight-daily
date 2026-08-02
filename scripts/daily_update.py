@@ -572,7 +572,32 @@ async def main():
         }
         all_results.append(full_event)
 
-    # 4. 存储结果
+    # 5. 挑选今日名言：从所有事件的多维视角中选一句最契合今日主题的
+    print("\n💬 正在从多维视角中挑选今日名言...")
+    candidate_quotes = []
+    for ev in all_results:
+        for p in ev.get("perspectives", []):
+            q = p.get("quote", "")
+            src = p.get("source", "")
+            if q and src and len(q) < 60:
+                candidate_quotes.append({"text": q, "source": src})
+
+    if candidate_quotes:
+        pick_prompt = f"""以下是从今日新闻分析的多维视角中摘录的{len(candidate_quotes)}条名言：
+{json.dumps(candidate_quotes, ensure_ascii=False, indent=2)}
+
+请从中挑选 1 条最有道理、最契合今日事件主题的名言作为"今日名言"，
+以 JSON 输出：{{"text": "选中的名言原文", "source": "对应的出处"}}
+必须从候选中挑选，不得自创。仅输出 JSON。"""
+        pick_result = await call_llm(pick_prompt, "请从候选名言中挑选1条输出JSON。")
+        daily_quote = extract_json(pick_result)
+        if not daily_quote or "text" not in daily_quote:
+            daily_quote = candidate_quotes[0]
+    else:
+        daily_quote = {"text": "天下难事，必作于易", "source": "老子 · 道德经"}
+    print(f"   今日名言：「{daily_quote['text']}」——{daily_quote['source']}")
+
+    # 6. 存储结果
     today_date = today
     output_file = OUTPUT_DIR / f"{today_date}.json"
 
