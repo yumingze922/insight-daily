@@ -223,16 +223,54 @@ def extract_json(text: str) -> dict:
 
 
 # ============================================================
-# 36氪新闻获取（RSS Feed）
+# 36氪新闻获取（RSS Feed + 多源备份）
 # ============================================================
+
+# 36kr RSSHub 备用入口（36kr 官方 RSS 反爬时的替代方案，内容仍是36氪的）
+RSSHUB_36KR_SOURCES = [
+    {"name": "36氪(RSSHub-1)", "url": "https://rsshub.rssforever.com/36kr/newsflashes"},
+    {"name": "36氪(RSSHub-2)", "url": "https://hub.slarker.me/36kr/newsflashes"},
+    {"name": "36氪(RSSHub-3)", "url": "https://rsshub.ktachibana.party/36kr/newsflashes"},
+]
+
+# 备用新闻源（36kr 反爬时自动切换）
+BACKUP_RSS_SOURCES = [
+    {"name": "少数派 sspai", "url": "https://sspai.com/feed"},
+    {"name": "爱范儿 ifanr", "url": "https://www.ifanr.com/feed"},
+    {"name": "钛媒体 tmtpost", "url": "https://www.tmtpost.com/rss"},
+    {"name": "极客公园 geekpark", "url": "https://www.geekpark.net/rss"},
+]
+
+def _parse_rss_generic(xml_text: str, source_name: str, limit: int = 8) -> str:
+    """通用 RSS 解析：提取前 N 篇文章标题+摘要"""
+    import re
+    items = re.findall(r'<item>(.*?)</item>', xml_text, re.DOTALL)
+    if not items:
+        items = re.findall(r'<entry>(.*?)</entry>', xml_text, re.DOTALL)
+    results = []
+    for item_xml in items[:limit]:
+        title_m = re.search(r'<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>', item_xml, re.DOTALL)
+        if not title_m:
+            continue
+        title = re.sub(r'\s+', ' ', title_m.group(1)).strip()
+        desc_m = re.search(r'<description>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</description>', item_xml, re.DOTALL)
+        desc = ""
+        if desc_m:
+            desc = re.sub(r'<[^>]+>', '', desc_m.group(1))
+            desc = re.sub(r'\s+', ' ', desc).strip()[:200]
+        results.append(f"{title}" + (f"：{desc}" if desc else ""))
+    if results:
+        return f"【{source_name}要闻】\n\n" + "\n\n".join(f"{i+1}. {t}" for i, t in enumerate(results))
+    return ""
 
 async def fetch_36kr_news() -> str:
     """从36氪 RSS Feed 获取今日「八点一氪」新闻摘要
 
     数据源：https://36kr.com/feed
-    每天早上 7:48 左右发布，我们的 cron 在 8:00 触发，时间刚好。
+    每天早上 7:48 左右发布。
 
-    返回：八点一氪专栏的标题 + 正文内容（纯文本）
+    如果 36kr 反爬/不可用，自动回退到备用科技媒体 RSS。
+    返回：新闻标题+摘要（纯文本）
     """
     import re
     import xml.etree.ElementTree as ET
@@ -303,7 +341,47 @@ async def fetch_36kr_news() -> str:
             raise ValueError("RSS Feed 中无可用内容")
 
     except Exception as e:
-        print(f"   ❌ RSS 获取失败: {e}")
+        print(f"   ❌ 36kr RSS 获取失败: {e}")
+
+        # 回退 1：RSSHub 的 36氪信息流（内容仍是36氪的，绕过反爬）
+        for src in RSSHUB_36KR_SOURCES:
+            try:
+                print(f"   🔄 尝试 {src['name']}...")
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    resp = await client.get(
+                        src["url"],
+                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                    )
+                    if resp.status_code != 200 or len(resp.text) < 200:
+                        print(f"   ⚠️  {src['name']} 不可用（{resp.status_code}）")
+                        continue
+                    backup_content = _parse_rss_generic(resp.text, "36氪快讯")
+                    if backup_content:
+                        print(f"   ✅ {src['name']} 获取成功（36氪内容）")
+                        return backup_content
+            except Exception as e2:
+                print(f"   ⚠️  {src['name']} 失败: {e2}")
+                continue
+
+        # 回退 2：通用科技媒体
+        for src in BACKUP_RSS_SOURCES:
+            try:
+                print(f"   🔄 尝试备用源：{src['name']}...")
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    resp = await client.get(
+                        src["url"],
+                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                    )
+                    if resp.status_code != 200 or len(resp.text) < 100:
+                        print(f"   ⚠️  {src['name']} 不可用（{resp.status_code}）")
+                        continue
+                    backup_content = _parse_rss_generic(resp.text, src["name"])
+                    if backup_content:
+                        print(f"   ✅ 备用源 {src['name']} 获取成功")
+                        return backup_content
+            except Exception as e2:
+                print(f"   ⚠️  {src['name']} 失败: {e2}")
+                continue
 
         # 终极回退：手动输入文件
         input_file = Path(__file__).parent / "news_input.txt"
